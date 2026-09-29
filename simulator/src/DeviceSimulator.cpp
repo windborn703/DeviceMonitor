@@ -4,9 +4,9 @@
 #include <QTcpSocket>       // 接受连接后每个客户端对应一个 QTcpSocket
 #include <QHostAddress>     // IP 地址（QHostAddress::Any = 监听所有网卡）
 #include <QRandomGenerator> // 随机数（Qt 的随机数类，比 rand() 好用）
-#include <QDebug>           // qInfo()/qCritical() 日志输出
 
 #include "protocol.h"       // 共享协议：打包函数在这
+#include "console_utf8.h"   // printUtf8：日志中文输出不乱码
 
 DeviceSimulator::DeviceSimulator(QObject *parent)
     : QObject(parent)
@@ -25,12 +25,11 @@ bool DeviceSimulator::start(quint16 port)
 {
     // 开始监听。QHostAddress::Any = 不管本机有几个网卡/什么 IP，都接受连接。
     if (!m_server.listen(QHostAddress::Any, port)) {
-        qCritical() << "监听失败：" << m_server.errorString();
+        printUtf8("监听失败：%s\n", qPrintable(m_server.errorString()));
         return false;
     }
 
-    qInfo() << "设备模拟器启动，监听端口" << port
-            << "（设备 ID =" << m_deviceId << "）";
+    printUtf8("设备模拟器启动，监听端口 %u（设备 ID = %u）\n", port, m_deviceId);
 
     m_timer.start(2000);  // 2000 毫秒 = 每 2 秒采样一次
     return true;
@@ -47,9 +46,9 @@ void DeviceSimulator::onNewConnection()
         connect(socket, &QTcpSocket::disconnected,
                 this, &DeviceSimulator::onClientDisconnected);
 
-        qInfo() << "客户端接入：" << socket->peerAddress().toString()
-                << ":" << socket->peerPort()
-                << "（当前在线" << m_clients.size() << "个）";
+        printUtf8("客户端接入：%s:%u（当前在线 %d 个）\n",
+                  qPrintable(socket->peerAddress().toString()),
+                  socket->peerPort(), int(m_clients.size()));
     }
 }
 
@@ -62,7 +61,7 @@ void DeviceSimulator::onClientDisconnected()
         return;
 
     m_clients.removeAll(socket);
-    qInfo() << "客户端断开（剩余" << m_clients.size() << "个连接）";
+    printUtf8("客户端断开（剩余 %d 个连接）\n", int(m_clients.size()));
 
     // deleteLater()：不能直接 delete——当前可能还在这个 socket 的信号
     // 处理流程中，直接删会出事。交给事件循环"下次有空时"再销毁。
@@ -91,11 +90,8 @@ void DeviceSimulator::onTick()
     // --- 4. 广播给所有客户端 ---
     broadcast(bytes);
 
-    qInfo().noquote() << QString("采样 #%1 | 温度 %2 ℃ | 压力 %3 kPa | 发送帧 %4 字节")
-                             .arg(m_sequence)
-                             .arg(m_temperature, 0, 'f', 2)
-                             .arg(m_pressure, 0, 'f', 2)
-                             .arg(frame.size());
+    printUtf8("采样 #%u | 温度 %.2f ℃ | 压力 %.2f kPa | 发送帧 %zu 字节\n",
+              m_sequence, double(m_temperature), double(m_pressure), frame.size());
 }
 
 void DeviceSimulator::broadcast(const QByteArray &data)

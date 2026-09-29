@@ -120,6 +120,47 @@ inline std::vector<uint8_t> packFrame(FrameType type, const uint8_t *payload, si
     return frame;
 }
 
+// ---------- 拆包：大端字节流 → 数值（打包的逆过程）----------
+// 这些是"翻译器"：把网络来的大端字节按协议还原成本机数值。
+// 拆包和打包必须严格对称，否则两端读到的数就不一样。
+
+// 从大端字节流读 uint16_t（打包时 writeU16BigEndian 的逆操作）
+inline uint16_t readU16BigEndian(const uint8_t *p)
+{
+    return uint16_t((uint16_t(p[0]) << 8) | p[1]);
+}
+
+// 从大端字节流读 uint32_t
+inline uint32_t readU32BigEndian(const uint8_t *p)
+{
+    return (uint32_t(p[0]) << 24) | (uint32_t(p[1]) << 16)
+         | (uint32_t(p[2]) << 8)  |  uint32_t(p[3]);
+}
+
+// 从大端字节流读 float（先读回位模式，再按位变回 float）
+inline float readFloatBigEndian(const uint8_t *p)
+{
+    uint32_t bits = readU32BigEndian(p);
+    float f;
+    std::memcpy(&f, &bits, 4);
+    return f;
+}
+
+// 解析数据上报帧的负载：p 指向负载开头，len 是负载长度。
+// 成功返回 true 并把字段填进引用参数；长度不够返回 false。
+inline bool parseDataReportPayload(const uint8_t *p, size_t len,
+                                   uint16_t &deviceId, uint32_t &sequence,
+                                   float &temperature, float &pressure)
+{
+    if (len < 14)   // 负载固定 14 字节，短了就不是合法的数据上报帧
+        return false;
+    deviceId    = readU16BigEndian(p);      // 偏移 0，长 2
+    sequence    = readU32BigEndian(p + 2);  // 偏移 2，长 4
+    temperature = readFloatBigEndian(p + 6); // 偏移 6，长 4
+    pressure    = readFloatBigEndian(p + 10); // 偏移 10，长 4
+    return true;
+}
+
 // ---------- 各类型帧的打包函数 ----------
 
 // 数据上报帧：设备周期上报一次采样
