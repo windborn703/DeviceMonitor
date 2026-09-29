@@ -3,6 +3,7 @@
 #include "DeviceClient.h"
 #include "RealtimeCurveWidget.h"
 #include "HistoryTableModel.h"
+#include "DataLogger.h"
 
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -18,6 +19,8 @@
 #include <QTableView>
 #include <QDoubleSpinBox>
 #include <QHeaderView>
+#include <QThread>
+#include <QDir>
 #include "protocol.h"   // 指令码常量 CTRL_CMD_SET_PERIOD
 
 MainWindow::MainWindow(QWidget *parent)
@@ -54,6 +57,51 @@ MainWindow::MainWindow(QWidget *parent)
 
     setConnectedState(false);  // 初始：未连接
     log("上位机已启动。请确认设备模拟器在运行，然后点击【连接】。");
+
+    // ===== 数据记录线程（Worker + moveToThread 模式）=====
+    m_loggerThread = new QThread(this);
+    m_logger = new DataLogger;  // 注意：无 parent —— 有 parent 的对象不能 moveToThread
+
+    // 关键一行：把 logger 搬到工作线程。此后它的槽函数都在工作线程执行。
+    m_logger->moveToThread(m_loggerThread);
+
+    // 投递信号 → logger 槽（因为线程不同，自动使用队列连接）
+    connect(this, &MainWindow::startRecordRequested,
+            m_logger, &DataLogger::start);
+    connect(this, &MainWindow::recordRequested,
+            m_logger, &DataLogger::appendRecord);
+    connect(this, &MainWindow::stopRecordRequested,
+            m_logger, &DataLogger::stop);
+
+    // logger 的结果信号 → 主线程界面
+    connect(m_logger, &DataLogger::started, this,
+            [this](const QString &path) {
+                log(QString("📁 开始数据记录：%1").arg(path), "green");
+            });
+    connect(m_logger, &DataLogger::stopped, this,
+            [this](int total) {
+                log(QString("📁 数据记录结束，共 %1 条（CSV 文件已保存到 records/ 目录）")
+                        .arg(total), "green");
+                m_logging = false;
+            });
+    connect(m_logger, &DataLogger::errorOccurred, this,
+            [this](const QString &what) {
+                log(QString("数据记录错误：%1").arg(what), "red");
+            });
+
+    // 线程退出时回收 logger 对象
+    connect(m_loggerThread, &QThread::finished,
+            m_logger, &QObject::deleteLater);
+
+    m_loggerThread->start();  // 启动工作线程的事件循环
+}
+
+MainWindow::~MainWindow()
+{
+    // 标准收尾：quit() 请求线程事件循环退出 → wait() 等它真正退出
+    // （不 wait 的话，对象销毁时线程可能还在跑 → 崩溃）
+    m_loggerThread->quit();
+    m_loggerThread->wait();
 }
 
 void MainWindow::buildUi()
@@ -223,6 +271,13 @@ void MainWindow::onConnected()
     m_statusLabel->setStyleSheet("color: green; font-weight: bold;");
     statusBar()->showMessage("已连接");
     log("连接成功，等待设备数据...", "green");
+
+    // 启动数据记录：CSV 文件按时间命名，放在 records/ 目录
+    QDir().mkpath("records");
+    const QString filePath = QString("records/data_%1.csv")
+        .arg(QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss"));
+    m_logging = true;
+    emit startRecordRequested(filePath);  // 队列投递到工作线程
 }
 
 void MainWindow::onDisconnected()
@@ -239,6 +294,8 @@ void MainWindow::onDisconnected()
     m_alarmCount = 0;             // 报警计数复位
     m_alarmStatus->setText("✓ 温度正常");
     m_alarmStatus->setStyleSheet("color: green;");
+    if (m_logging)
+        emit stopRecordRequested();  // 通知工作线程收尾关闭文件
     statusBar()->showMessage("已断开");
     log("连接已断开。", "orange");
 }
@@ -274,8 +331,12 @@ void MainWindow::onDataReceived(quint16 deviceId, quint32 sequence,
     }
 
     // ---- 写入历史表格（超限行会标红）----
-    m_historyModel->addRecord(sequence, temperature, pressure,
-                              QDateTime::currentDateTime(), alarm);
+    const QDateTime now = QDateTime::currentDateTime();
+    m_historyModel->addRecord(sequence, temperature, pressure, now, alarm);
+
+    // ---- 投递给工作线程写 CSV（队列连接，主线程不碰磁盘）----
+    if (m_logging)
+        emit recordRequested(sequence, temperature, pressure, now, alarm);
 
     log(QString("采样 #%1：温度 %2 ℃，压力 %3 kPa")
             .arg(sequence)

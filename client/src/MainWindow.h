@@ -12,9 +12,11 @@ class QSpinBox;
 class QDoubleSpinBox;
 class QTextEdit;
 class QTableView;
+class QThread;
 class DeviceClient;
 class RealtimeCurveWidget;
 class HistoryTableModel;
+class DataLogger;
 
 class MainWindow : public QMainWindow
 {
@@ -22,6 +24,14 @@ class MainWindow : public QMainWindow
 
 public:
     explicit MainWindow(QWidget *parent = nullptr);
+    ~MainWindow() override;  // 析构：负责让工作线程安全退出
+
+signals:
+    // 投递给工作线程的信号（跨线程 → 自动队列连接）
+    void startRecordRequested(const QString &filePath);
+    void recordRequested(quint32 sequence, float temperature, float pressure,
+                         const QDateTime &time, bool alarm);
+    void stopRecordRequested();
 
 private slots:
     // --- 用户操作 ---
@@ -67,6 +77,11 @@ private:
     QDoubleSpinBox *m_tempLowSpin  = nullptr;  // 温度下限阈值
     QLabel         *m_alarmStatus  = nullptr;  // 报警状态标签
     int m_alarmCount = 0;                      // 累计报警次数
+
+    // --- 数据记录（多线程）---
+    QThread    *m_loggerThread = nullptr;  // 工作线程
+    DataLogger *m_logger       = nullptr;  // Worker 对象（住在工作线程）
+    bool m_logging = false;                // 是否正在记录
 
     // --- 通信层 ---
     DeviceClient *m_client = nullptr;
