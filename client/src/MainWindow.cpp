@@ -1,0 +1,189 @@
+// ============ 界面层实现 ============
+#include "MainWindow.h"
+#include "DeviceClient.h"
+
+#include <QGroupBox>
+#include <QHBoxLayout>
+#include <QVBoxLayout>
+#include <QFormLayout>
+#include <QLabel>
+#include <QLineEdit>
+#include <QPushButton>
+#include <QTextEdit>
+#include <QStatusBar>
+#include <QDateTime>
+
+MainWindow::MainWindow(QWidget *parent)
+    : QMainWindow(parent)
+{
+    setWindowTitle("DeviceMonitor 设备监控上位机");
+
+    buildUi();  // 先画界面
+
+    // 创建通信层（界面是它的 parent：窗口关闭时自动销毁它）
+    m_client = new DeviceClient(this);
+
+    // --- 界面操作 → 通信层 ---
+    connect(m_connectBtn, &QPushButton::clicked,
+            this, &MainWindow::onConnectClicked);
+    connect(m_disconnectBtn, &QPushButton::clicked,
+            this, &MainWindow::onDisconnectClicked);
+
+    // --- 通信层的信号 → 界面响应（"收听广播"）---
+    connect(m_client, &DeviceClient::connected,
+            this, &MainWindow::onConnected);
+    connect(m_client, &DeviceClient::disconnected,
+            this, &MainWindow::onDisconnected);
+    connect(m_client, &DeviceClient::connectionError,
+            this, &MainWindow::onConnectionError);
+    connect(m_client, &DeviceClient::dataReceived,
+            this, &MainWindow::onDataReceived);
+    connect(m_client, &DeviceClient::protocolError,
+            this, &MainWindow::onProtocolError);
+
+    setConnectedState(false);  // 初始：未连接
+    log("上位机已启动。请确认设备模拟器在运行，然后点击【连接】。");
+}
+
+void MainWindow::buildUi()
+{
+    // ===== 顶部：连接设置 =====
+    auto *connectGroup = new QGroupBox("连接设置", this);
+    m_hostEdit = new QLineEdit("127.0.0.1", connectGroup);
+    m_portEdit = new QLineEdit("8899", connectGroup);
+    m_portEdit->setMaximumWidth(80);
+    m_connectBtn = new QPushButton("连接", connectGroup);
+    m_disconnectBtn = new QPushButton("断开", connectGroup);
+
+    auto *connectLayout = new QHBoxLayout(connectGroup);
+    connectLayout->addWidget(new QLabel("设备 IP：", connectGroup));
+    connectLayout->addWidget(m_hostEdit);
+    connectLayout->addWidget(new QLabel("端口：", connectGroup));
+    connectLayout->addWidget(m_portEdit);
+    connectLayout->addStretch();       // 弹性空白：把按钮推到右边
+    connectLayout->addWidget(m_connectBtn);
+    connectLayout->addWidget(m_disconnectBtn);
+
+    // ===== 中部：实时数据 =====
+    auto *dataGroup = new QGroupBox("实时数据", this);
+    m_devIdValue = new QLabel("--", dataGroup);
+    m_seqValue   = new QLabel("--", dataGroup);
+    m_tempValue  = new QLabel("-- ℃", dataGroup);
+    m_pressValue = new QLabel("-- kPa", dataGroup);
+    m_statusLabel = new QLabel("● 未连接", dataGroup);
+
+    // 温压显示用大字（24 号）更醒目
+    QFont bigFont = m_tempValue->font();
+    bigFont.setPointSize(24);
+    m_tempValue->setFont(bigFont);
+    m_pressValue->setFont(bigFont);
+
+    // QFormLayout：标签-值 成对排列的表单布局
+    auto *dataLayout = new QFormLayout(dataGroup);
+    dataLayout->addRow("设备 ID：", m_devIdValue);
+    dataLayout->addRow("采样序号：", m_seqValue);
+    dataLayout->addRow("温度：", m_tempValue);
+    dataLayout->addRow("压力：", m_pressValue);
+    dataLayout->addRow("状态：", m_statusLabel);
+
+    // ===== 底部：日志 =====
+    auto *logGroup = new QGroupBox("通信日志", this);
+    m_logEdit = new QTextEdit(logGroup);
+    m_logEdit->setReadOnly(true);              // 日志只读，用户不能编辑
+    auto *logLayout = new QVBoxLayout(logGroup);
+    logLayout->addWidget(m_logEdit);
+
+    // ===== 组装：垂直主布局 =====
+    auto *central = new QWidget(this);
+    auto *mainLayout = new QVBoxLayout(central);
+    mainLayout->addWidget(connectGroup);
+    mainLayout->addWidget(dataGroup);
+    mainLayout->addWidget(logGroup, /*stretch=*/1);  // 日志区占剩余空间
+    setCentralWidget(central);
+
+    resize(560, 480);
+    statusBar()->showMessage("就绪");
+}
+
+void MainWindow::log(const QString &msg, const QString &color)
+{
+    const QString time = QDateTime::currentDateTime().toString("HH:mm:ss");
+    // 用 HTML 上色（QTextEdit 支持简单 HTML）
+    m_logEdit->append(QString("<span style='color:%1'>[%2] %3</span>")
+                          .arg(color, time, msg.toHtmlEscaped()));
+}
+
+void MainWindow::setConnectedState(bool connected)
+{
+    m_hostEdit->setEnabled(!connected);      // 已连接时禁止改地址
+    m_portEdit->setEnabled(!connected);
+    m_connectBtn->setEnabled(!connected);
+    m_disconnectBtn->setEnabled(connected);
+}
+
+// ============ 用户操作 ============
+
+void MainWindow::onConnectClicked()
+{
+    bool ok = false;
+    const quint16 port = m_portEdit->text().toUShort(&ok);
+    if (!ok || port == 0) {
+        log("端口无效，请输入 1-65535 之间的数字。", "red");
+        return;
+    }
+    log(QString("正在连接 %1:%2 ...")
+            .arg(m_hostEdit->text()).arg(port), "gray");
+    m_client->connectToDevice(m_hostEdit->text(), port);
+}
+
+void MainWindow::onDisconnectClicked()
+{
+    m_client->disconnectFromDevice();
+}
+
+// ============ 通信层的信号响应 ============
+
+void MainWindow::onConnected()
+{
+    setConnectedState(true);
+    m_statusLabel->setText("● 已连接");
+    m_statusLabel->setStyleSheet("color: green; font-weight: bold;");
+    statusBar()->showMessage("已连接");
+    log("连接成功，等待设备数据...", "green");
+}
+
+void MainWindow::onDisconnected()
+{
+    setConnectedState(false);
+    m_statusLabel->setText("● 未连接");
+    m_statusLabel->setStyleSheet("color: red;");
+    m_devIdValue->setText("--");
+    m_seqValue->setText("--");
+    m_tempValue->setText("-- ℃");
+    m_pressValue->setText("-- kPa");
+    statusBar()->showMessage("已断开");
+    log("连接已断开。", "orange");
+}
+
+void MainWindow::onConnectionError(const QString &what)
+{
+    log(QString("连接失败：%1").arg(what), "red");
+}
+
+void MainWindow::onDataReceived(quint16 deviceId, quint32 sequence,
+                                float temperature, float pressure)
+{
+    m_devIdValue->setText(QString::number(deviceId));
+    m_seqValue->setText(QString::number(sequence));
+    m_tempValue->setText(QString("%1 ℃").arg(temperature, 0, 'f', 2));
+    m_pressValue->setText(QString("%1 kPa").arg(pressure, 0, 'f', 2));
+    log(QString("采样 #%1：温度 %2 ℃，压力 %3 kPa")
+            .arg(sequence)
+            .arg(temperature, 0, 'f', 2)
+            .arg(pressure, 0, 'f', 2));
+}
+
+void MainWindow::onProtocolError(const QString &reason)
+{
+    log(QString("协议告警：%1").arg(reason), "orange");
+}
