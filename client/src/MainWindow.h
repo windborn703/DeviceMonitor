@@ -11,6 +11,7 @@ class QPushButton;
 class QSpinBox;
 class QTextEdit;
 class DeviceClient;
+class RealtimeCurveWidget;
 
 class MainWindow : public QMainWindow
 {
@@ -52,6 +53,7 @@ private:
     QLabel      *m_pressValue  = nullptr;  // 压力显示（大字）
     QLabel      *m_statusLabel = nullptr;  // 连接状态灯
     QTextEdit   *m_logEdit     = nullptr;  // 日志区
+    RealtimeCurveWidget *m_curveWidget = nullptr;  // 实时曲线
 
     // --- 通信层 ---
     DeviceClient *m_client = nullptr;

@@ -1,6 +1,7 @@
 // ============ 界面层实现 ============
 #include "MainWindow.h"
 #include "DeviceClient.h"
+#include "RealtimeCurveWidget.h"
 
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -88,6 +89,12 @@ void MainWindow::buildUi()
     connectLayout->addWidget(m_connectBtn);
     connectLayout->addWidget(m_disconnectBtn);
 
+    // ===== 中部：实时曲线 =====
+    auto *curveGroup = new QGroupBox("实时曲线", this);
+    m_curveWidget = new RealtimeCurveWidget(curveGroup);
+    auto *curveLayout = new QVBoxLayout(curveGroup);
+    curveLayout->addWidget(m_curveWidget);
+
     // ===== 中部：实时数据 =====
     auto *dataGroup = new QGroupBox("实时数据", this);
     m_devIdValue = new QLabel("--", dataGroup);
@@ -121,11 +128,12 @@ void MainWindow::buildUi()
     auto *central = new QWidget(this);
     auto *mainLayout = new QVBoxLayout(central);
     mainLayout->addWidget(connectGroup);
+    mainLayout->addWidget(curveGroup, /*stretch=*/2);  // 曲线区占大头
     mainLayout->addWidget(dataGroup);
-    mainLayout->addWidget(logGroup, /*stretch=*/1);  // 日志区占剩余空间
+    mainLayout->addWidget(logGroup, /*stretch=*/1);    // 日志区占剩余空间
     setCentralWidget(central);
 
-    resize(560, 480);
+    resize(700, 720);
     statusBar()->showMessage("就绪");
 }
 
@@ -194,6 +202,7 @@ void MainWindow::onDisconnected()
     m_seqValue->setText("--");
     m_tempValue->setText("-- ℃");
     m_pressValue->setText("-- kPa");
+    m_curveWidget->clear();  // 曲线清空，下次连接重新画
     statusBar()->showMessage("已断开");
     log("连接已断开。", "orange");
 }
@@ -206,6 +215,7 @@ void MainWindow::onConnectionError(const QString &what)
 void MainWindow::onDataReceived(quint16 deviceId, quint32 sequence,
                                 float temperature, float pressure)
 {
+    m_curveWidget->addSample(temperature, pressure);  // 曲线加一个点（内部会请求重绘）
     m_devIdValue->setText(QString::number(deviceId));
     m_seqValue->setText(QString::number(sequence));
     m_tempValue->setText(QString("%1 ℃").arg(temperature, 0, 'f', 2));
