@@ -9,6 +9,7 @@
 #include <QTcpServer>   // TCP 服务端
 #include <QTimer>       // 定时器
 #include <QList>        // Qt 风格的动态数组
+#include "FrameParser.h"  // 帧解析器：解析上位机发来的指令帧
 
 class QTcpSocket;       // 前置声明：这里只用指针，不用看到完整定义
 
@@ -27,6 +28,8 @@ private slots:   // 槽函数：被信号触发时执行的"回调"
     void onNewConnection();      // 槽：有新客户端连进来了
     void onClientDisconnected(); // 槽：有客户端断开了
     void onTick();               // 槽：定时器到点 → 采样 + 广播
+    void onClientDataReady();    // 槽：有客户端发来数据
+    void onCtrlCmdReceived(quint8 cmd, quint32 param);  // 槽：解析出控制指令
 
 private:
     // 把数据发给所有已连接的客户端
@@ -36,6 +39,7 @@ private:
     QTcpServer m_server;            // 服务端对象
     QList<QTcpSocket *> m_clients;  // 当前所有连接（每个客户端一个 socket）
     QTimer m_timer;                 // 采样定时器
+    protocol::FrameParser m_parser; // 帧解析器：把客户端发来的字节流还原成指令
 
     // --- 设备状态（模拟的传感器数据）---
     quint16 m_deviceId    = 1;        // 本设备 ID

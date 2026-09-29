@@ -9,9 +9,11 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QSpinBox>
 #include <QTextEdit>
 #include <QStatusBar>
 #include <QDateTime>
+#include "protocol.h"   // 指令码常量 CTRL_CMD_SET_PERIOD
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -28,6 +30,8 @@ MainWindow::MainWindow(QWidget *parent)
             this, &MainWindow::onConnectClicked);
     connect(m_disconnectBtn, &QPushButton::clicked,
             this, &MainWindow::onDisconnectClicked);
+    connect(m_applyBtn, &QPushButton::clicked,
+            this, &MainWindow::onApplyClicked);
 
     // --- 通信层的信号 → 界面响应（"收听广播"）---
     connect(m_client, &DeviceClient::connected,
@@ -38,6 +42,8 @@ MainWindow::MainWindow(QWidget *parent)
             this, &MainWindow::onConnectionError);
     connect(m_client, &DeviceClient::dataReceived,
             this, &MainWindow::onDataReceived);
+    connect(m_client, &DeviceClient::ctrlAckReceived,
+            this, &MainWindow::onCtrlAckReceived);
     connect(m_client, &DeviceClient::protocolError,
             this, &MainWindow::onProtocolError);
 
@@ -60,6 +66,24 @@ void MainWindow::buildUi()
     connectLayout->addWidget(m_hostEdit);
     connectLayout->addWidget(new QLabel("端口：", connectGroup));
     connectLayout->addWidget(m_portEdit);
+    connectLayout->addSpacing(20);
+
+    // 采样周期设置（下发指令用）
+    m_periodSpin = new QSpinBox(connectGroup);
+    // 注意：客户端范围（100~100000）比设备的合法范围（200~60000）宽 ——
+    // 这是故意的"双重校验"设计：
+    //   客户端 UI 只是输入便利（软约束），设备端校验才是安全底线（硬约束）。
+    //   设备不信任任何客户端——哪怕客户端发来 100000，设备也要能拒绝。
+    //   （如果两边范围一样，设备的拒绝逻辑永远没机会触发，等于白写）
+    m_periodSpin->setRange(100, 100000);
+    m_periodSpin->setValue(2000);         // 默认 2000ms，与模拟器初始一致
+    m_periodSpin->setSingleStep(100);     // 步进 100ms
+    m_periodSpin->setSuffix(" ms");       // 显示单位
+    m_applyBtn = new QPushButton("应用", connectGroup);
+    connectLayout->addWidget(new QLabel("采样周期：", connectGroup));
+    connectLayout->addWidget(m_periodSpin);
+    connectLayout->addWidget(m_applyBtn);
+
     connectLayout->addStretch();       // 弹性空白：把按钮推到右边
     connectLayout->addWidget(m_connectBtn);
     connectLayout->addWidget(m_disconnectBtn);
@@ -119,6 +143,8 @@ void MainWindow::setConnectedState(bool connected)
     m_portEdit->setEnabled(!connected);
     m_connectBtn->setEnabled(!connected);
     m_disconnectBtn->setEnabled(connected);
+    m_periodSpin->setEnabled(connected);     // 采样周期设置只在连接时可用
+    m_applyBtn->setEnabled(connected);
 }
 
 // ============ 用户操作 ============
@@ -139,6 +165,13 @@ void MainWindow::onConnectClicked()
 void MainWindow::onDisconnectClicked()
 {
     m_client->disconnectFromDevice();
+}
+
+void MainWindow::onApplyClicked()
+{
+    const int periodMs = m_periodSpin->value();
+    log(QString("下发指令：采样周期改为 %1 ms，等待设备确认...").arg(periodMs), "gray");
+    m_client->sendCtrlCmd(protocol::CTRL_CMD_SET_PERIOD, quint32(periodMs));
 }
 
 // ============ 通信层的信号响应 ============
@@ -186,4 +219,14 @@ void MainWindow::onDataReceived(quint16 deviceId, quint32 sequence,
 void MainWindow::onProtocolError(const QString &reason)
 {
     log(QString("协议告警：%1").arg(reason), "orange");
+}
+
+void MainWindow::onCtrlAckReceived(quint8 cmd, quint8 result)
+{
+    if (cmd != protocol::CTRL_CMD_SET_PERIOD)
+        return;
+    if (result == protocol::CTRL_RESULT_OK)
+        log("✅ 设备确认：采样周期已更新，观察数据刷新节奏的变化", "green");
+    else
+        log("❌ 设备拒绝了指令（参数可能超范围）", "red");
 }

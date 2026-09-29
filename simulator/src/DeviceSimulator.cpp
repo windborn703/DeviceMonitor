@@ -19,6 +19,10 @@ DeviceSimulator::DeviceSimulator(QObject *parent)
     // 定时器到点 → onTick() 采样一次
     connect(&m_timer, &QTimer::timeout,
             this, &DeviceSimulator::onTick);
+
+    // 解析器剥出控制指令帧 → onCtrlCmdReceived()
+    connect(&m_parser, &protocol::FrameParser::ctrlCmdReceived,
+            this, &DeviceSimulator::onCtrlCmdReceived);
 }
 
 bool DeviceSimulator::start(quint16 port)
@@ -46,6 +50,10 @@ void DeviceSimulator::onNewConnection()
         connect(socket, &QTcpSocket::disconnected,
                 this, &DeviceSimulator::onClientDisconnected);
 
+        // 这个客户端发来数据时 → onClientDataReady()
+        connect(socket, &QTcpSocket::readyRead,
+                this, &DeviceSimulator::onClientDataReady);
+
         printUtf8("客户端接入：%s:%u（当前在线 %d 个）\n",
                   qPrintable(socket->peerAddress().toString()),
                   socket->peerPort(), int(m_clients.size()));
@@ -67,6 +75,42 @@ void DeviceSimulator::onClientDisconnected()
     // 处理流程中，直接删会出事。交给事件循环"下次有空时"再销毁。
     // （面试点：deleteLater 和 delete 的区别）
     socket->deleteLater();
+}
+
+void DeviceSimulator::onClientDataReady()
+{
+    // 和断开处理一样：多个客户端共用一个槽，用 sender() 区分是谁发的数据
+    QTcpSocket *socket = qobject_cast<QTcpSocket *>(sender());
+    if (!socket)
+        return;
+
+    // 收到的字节全部喂给 FrameParser（它内部处理粘包/半包）
+    m_parser.appendData(socket->readAll());
+}
+
+void DeviceSimulator::onCtrlCmdReceived(quint8 cmd, quint32 param)
+{
+    // 注意：ack 必须存进局部变量再用 ——
+    // packCtrlAck(...).data() 这种写法拿到的是"临时对象"的指针，
+    // 函数返回后临时对象销毁，指针变成悬垂指针（经典 C++ 陷阱）
+    if (cmd == protocol::CTRL_CMD_SET_PERIOD) {
+        // 指令 1：设置采样周期。参数校验：合理范围 200ms ~ 60s
+        if (param < 200 || param > 60000) {
+            printUtf8("收到指令：设置采样周期 %u ms —— 参数超范围，拒绝\n", param);
+            auto ack = protocol::packCtrlAck(cmd, protocol::CTRL_RESULT_ERROR);
+            broadcast(QByteArray(reinterpret_cast<const char *>(ack.data()), int(ack.size())));
+            return;
+        }
+        // start(ms) 会同时更新间隔并重新计时（Qt 文档行为）
+        m_timer.start(int(param));
+        printUtf8("收到指令：采样周期改为 %u ms ✅ 已生效\n", param);
+        auto ack = protocol::packCtrlAck(cmd, protocol::CTRL_RESULT_OK);
+        broadcast(QByteArray(reinterpret_cast<const char *>(ack.data()), int(ack.size())));
+    } else {
+        printUtf8("收到未知指令码 %u，已忽略\n", cmd);
+        auto ack = protocol::packCtrlAck(cmd, protocol::CTRL_RESULT_ERROR);
+        broadcast(QByteArray(reinterpret_cast<const char *>(ack.data()), int(ack.size())));
+    }
 }
 
 void DeviceSimulator::onTick()

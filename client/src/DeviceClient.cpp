@@ -1,5 +1,6 @@
 // ============ 通信层实现 ============
 #include "DeviceClient.h"
+#include "protocol.h"   // packCtrlCmd 打包函数
 
 DeviceClient::DeviceClient(QObject *parent)
     : QObject(parent)
@@ -27,8 +28,22 @@ DeviceClient::DeviceClient(QObject *parent)
     connect(&m_parser, &protocol::FrameParser::dataReportReceived,
             this, &DeviceClient::dataReceived);
 
+    connect(&m_parser, &protocol::FrameParser::ctrlAckReceived,
+            this, &DeviceClient::ctrlAckReceived);
+
     connect(&m_parser, &protocol::FrameParser::parseError,
             this, &DeviceClient::protocolError);
+}
+
+void DeviceClient::sendCtrlCmd(quint8 cmd, quint32 param)
+{
+    if (!isConnected())
+        return;  // 没连接就不发（也可以让调用方自己判断）
+
+    // 打包成协议帧（大端字节序）→ 转 QByteArray → 写进 socket
+    auto frame = protocol::packCtrlCmd(cmd, param);
+    m_socket.write(reinterpret_cast<const char *>(frame.data()),
+                   qint64(frame.size()));
 }
 
 void DeviceClient::connectToDevice(const QString &host, quint16 port)

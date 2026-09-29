@@ -78,7 +78,7 @@ bool FrameParser::tryParseOneFrame()
     const uint8_t frameType = uint8_t(m_buffer[3]);
     const QByteArray payload = m_buffer.mid(6, payloadLen);  // 负载从偏移 6 开始
 
-    // 按类型分发（数据上报帧直接翻译成数值，方便上层直接用）
+    // 按类型分发：把字节负载翻译成结构化数值，再以专用信号抛出
     if (frameType == uint8_t(FrameType::DataReport)) {
         uint16_t deviceId = 0;
         uint32_t sequence = 0;
@@ -87,6 +87,19 @@ bool FrameParser::tryParseOneFrame()
                                    size_t(payload.size()),
                                    deviceId, sequence, temperature, pressure)) {
             emit dataReportReceived(deviceId, sequence, temperature, pressure);
+        }
+    } else if (frameType == uint8_t(FrameType::CtrlCmd)) {
+        uint8_t cmd = 0;
+        uint32_t param = 0;
+        if (parseCtrlCmdPayload(reinterpret_cast<const uint8_t *>(payload.constData()),
+                                size_t(payload.size()), cmd, param)) {
+            emit ctrlCmdReceived(cmd, param);
+        }
+    } else if (frameType == uint8_t(FrameType::CtrlAck)) {
+        uint8_t cmd = 0, result = 0;
+        if (parseCtrlAckPayload(reinterpret_cast<const uint8_t *>(payload.constData()),
+                                size_t(payload.size()), cmd, result)) {
+            emit ctrlAckReceived(cmd, result);
         }
     }
     emit frameReceived(frameType, payload);

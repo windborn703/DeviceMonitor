@@ -29,7 +29,11 @@ signals:
     // 成功解析出一帧"数据上报"（帧头+长度+校验全部验证通过）
     void dataReportReceived(quint16 deviceId, quint32 sequence,
                             float temperature, float pressure);
-    // 解析出任意一帧（类型 + 负载）。心跳/控制帧也走这里，供后续课程使用。
+    // 成功解析出一帧"控制指令"（设备侧订阅：收到上位机的指挥）
+    void ctrlCmdReceived(quint8 cmd, quint32 param);
+    // 成功解析出一帧"控制响应"（上位机侧订阅：设备对指令的回执）
+    void ctrlAckReceived(quint8 cmd, quint8 result);
+    // 解析出任意一帧（类型 + 负载）。心跳等通用帧走这里。
     void frameReceived(quint8 frameType, const QByteArray &payload);
     // 遇到异常帧（校验失败/长度异常）：给上层记日志、告警用
     void parseError(const QString &reason);

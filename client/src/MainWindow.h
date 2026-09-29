@@ -8,6 +8,7 @@
 class QLabel;
 class QLineEdit;
 class QPushButton;
+class QSpinBox;
 class QTextEdit;
 class DeviceClient;
 
@@ -22,6 +23,7 @@ private slots:
     // --- 用户操作 ---
     void onConnectClicked();     // 点了"连接"
     void onDisconnectClicked();  // 点了"断开"
+    void onApplyClicked();       // 点了"应用"（下发采样周期指令）
 
     // --- DeviceClient 的信号（通信层的"广播"，界面负责响应）---
     void onConnected();
@@ -29,6 +31,7 @@ private slots:
     void onConnectionError(const QString &what);
     void onDataReceived(quint16 deviceId, quint32 sequence,
                         float temperature, float pressure);
+    void onCtrlAckReceived(quint8 cmd, quint8 result);
     void onProtocolError(const QString &reason);
 
 private:
@@ -41,6 +44,8 @@ private:
     QLineEdit   *m_portEdit    = nullptr;  // 端口输入框
     QPushButton *m_connectBtn  = nullptr;  // 连接按钮
     QPushButton *m_disconnectBtn = nullptr; // 断开按钮
+    QSpinBox    *m_periodSpin  = nullptr;  // 采样周期设置（毫秒）
+    QPushButton *m_applyBtn    = nullptr;  // 应用按钮（下发指令）
     QLabel      *m_devIdValue  = nullptr;  // 设备 ID 显示
     QLabel      *m_seqValue    = nullptr;  // 采样序号显示
     QLabel      *m_tempValue   = nullptr;  // 温度显示（大字）

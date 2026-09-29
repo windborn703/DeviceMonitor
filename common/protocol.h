@@ -120,6 +120,13 @@ inline std::vector<uint8_t> packFrame(FrameType type, const uint8_t *payload, si
     return frame;
 }
 
+// ---------- 指令码定义 ----------
+constexpr uint8_t CTRL_CMD_SET_PERIOD = 1;  // 指令码 1：设置采样周期（毫秒）
+
+// 控制响应的结果码
+constexpr uint8_t CTRL_RESULT_OK    = 0;    // 执行成功
+constexpr uint8_t CTRL_RESULT_ERROR = 1;    // 执行失败（指令码不认识等）
+
 // ---------- 拆包：大端字节流 → 数值（打包的逆过程）----------
 // 这些是"翻译器"：把网络来的大端字节按协议还原成本机数值。
 // 拆包和打包必须严格对称，否则两端读到的数就不一样。
@@ -161,6 +168,28 @@ inline bool parseDataReportPayload(const uint8_t *p, size_t len,
     return true;
 }
 
+// 解析控制指令帧负载：[指令码 1B][参数 4B]
+inline bool parseCtrlCmdPayload(const uint8_t *p, size_t len,
+                                uint8_t &cmd, uint32_t &param)
+{
+    if (len < 5)
+        return false;
+    cmd   = p[0];                 // 指令码 1 字节，无需字节序转换
+    param = readU32BigEndian(p + 1);  // 参数 4 字节大端
+    return true;
+}
+
+// 解析控制响应帧负载：[指令码 1B][结果码 1B]
+inline bool parseCtrlAckPayload(const uint8_t *p, size_t len,
+                                uint8_t &cmd, uint8_t &result)
+{
+    if (len < 2)
+        return false;
+    cmd    = p[0];
+    result = p[1];
+    return true;
+}
+
 // ---------- 各类型帧的打包函数 ----------
 
 // 数据上报帧：设备周期上报一次采样
@@ -184,6 +213,16 @@ inline std::vector<uint8_t> packCtrlCmd(uint8_t cmd, uint32_t param)
     payload.push_back(cmd);
     writeU32BigEndian(payload, param);
     return packFrame(FrameType::CtrlCmd, payload.data(), payload.size());
+}
+
+// 控制响应帧：设备对指令的应答。[指令码 1B][结果码 1B]，0=成功
+inline std::vector<uint8_t> packCtrlAck(uint8_t cmd, uint8_t result)
+{
+    std::vector<uint8_t> payload;
+    payload.reserve(2);
+    payload.push_back(cmd);
+    payload.push_back(result);
+    return packFrame(FrameType::CtrlAck, payload.data(), payload.size());
 }
 
 // 心跳请求 / 心跳响应 / 控制响应：无负载，只发帧头

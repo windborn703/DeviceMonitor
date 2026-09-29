@@ -23,6 +23,8 @@ public:
     void disconnectFromDevice();
     // 当前是否已连接
     bool isConnected() const;
+    // 向设备发送控制指令（如设置采样周期），设备会回 CtrlAck
+    void sendCtrlCmd(quint8 cmd, quint32 param);
 
 signals:
     void connected();                        // 连接建立成功
@@ -31,6 +33,8 @@ signals:
     // 收到一帧数据上报（已通过协议层全部验证）
     void dataReceived(quint16 deviceId, quint32 sequence,
                       float temperature, float pressure);
+    // 收到设备的控制响应（result：0=成功，1=失败）
+    void ctrlAckReceived(quint8 cmd, quint8 result);
     void protocolError(const QString &reason);  // 协议层异常（坏帧等）
 
 private:
