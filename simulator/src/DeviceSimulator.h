@@ -30,6 +30,7 @@ private slots:   // 槽函数：被信号触发时执行的"回调"
     void onTick();               // 槽：定时器到点 → 采样 + 广播
     void onClientDataReady();    // 槽：有客户端发来数据
     void onCtrlCmdReceived(quint8 cmd, quint32 param);  // 槽：解析出控制指令
+    void onFrameReceived(quint8 type, const QByteArray &payload);  // 槽：通用帧（心跳等）
 
 private:
     // 把数据发给所有已连接的客户端

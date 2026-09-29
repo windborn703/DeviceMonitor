@@ -2,6 +2,9 @@
 build/
 build-*/
 
+# 运行时生成的数据记录文件
+records/
+
 # CMake 生成的缓存文件
 CMakeCache.txt
 CMakeFiles/

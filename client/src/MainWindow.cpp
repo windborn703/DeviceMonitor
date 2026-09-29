@@ -55,6 +55,15 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_client, &DeviceClient::protocolError,
             this, &MainWindow::onProtocolError);
 
+    // 自动重连状态（意外断开后 DeviceClient 会周期发这个信号）
+    connect(m_client, &DeviceClient::reconnecting, this,
+            [this](int attempt) {
+                m_statusLabel->setText(QString("⚠ 自动重连中（第 %1 次）...").arg(attempt));
+                m_statusLabel->setStyleSheet("color: orange; font-weight: bold;");
+                statusBar()->showMessage("连接断开，自动重连中");
+                log(QString("连接丢失，3 秒后进行第 %1 次自动重连...").arg(attempt), "orange");
+            });
+
     setConnectedState(false);  // 初始：未连接
     log("上位机已启动。请确认设备模拟器在运行，然后点击【连接】。");
 

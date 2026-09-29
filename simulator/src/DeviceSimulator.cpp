@@ -23,6 +23,24 @@ DeviceSimulator::DeviceSimulator(QObject *parent)
     // 解析器剥出控制指令帧 → onCtrlCmdReceived()
     connect(&m_parser, &protocol::FrameParser::ctrlCmdReceived,
             this, &DeviceSimulator::onCtrlCmdReceived);
+
+    // 解析器剥出任意帧 → onFrameReceived()（处理心跳请求等）
+    connect(&m_parser, &protocol::FrameParser::frameReceived,
+            this, &DeviceSimulator::onFrameReceived);
+}
+
+void DeviceSimulator::onFrameReceived(quint8 type, const QByteArray &)
+{
+    // 心跳请求："你还活着吗？" → 回心跳响应："我活着"
+    if (type == quint8(protocol::FrameType::HeartbeatReq)) {
+        auto rsp = protocol::packEmptyFrame(protocol::FrameType::HeartbeatRsp);
+        broadcast(QByteArray(reinterpret_cast<const char *>(rsp.data()),
+                             int(rsp.size())));
+        // 心跳频繁，日志只每 20 次打一条（避免刷屏，也是工程习惯）
+        static int beatCount = 0;
+        if (++beatCount % 20 == 0)
+            printUtf8("（心跳正常，已应答 %d 次）\n", beatCount);
+    }
 }
 
 bool DeviceSimulator::start(quint16 port)
