@@ -1,0 +1,20 @@
+# 编译产物目录（build 目录里的东西都是编译生成的，不需要存进 Git）
+build/
+build-*/
+
+# CMake 生成的缓存文件
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+
+# Qt Creator 的用户配置文件
+CMakeLists.txt.user*
+
+# 编译中间产物
+*.o
+*.obj
+*.exe
+
+# 编辑器配置
+.vscode/
+.idea/
