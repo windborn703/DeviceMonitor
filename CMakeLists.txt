@@ -11,3 +11,4 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # 两个子项目：各自的目录里有自己的 CMakeLists.txt
 add_subdirectory(client)      # 上位机客户端（简历主角）
 add_subdirectory(simulator)   # 设备模拟器（虚拟工业设备）
+add_subdirectory(tests)       # 单元测试（协议打包验证等）

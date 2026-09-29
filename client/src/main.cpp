@@ -13,8 +13,8 @@ int main(int argc, char *argv[])
 
     // 第 2 步：创建一个窗口上的控件
     // QLabel 是显示文字的标签，这里是"Hello World"
-    QLabel label("设备监控系统启动成功！");
-    label.resize(400, 200);  // 设置窗口大小：宽 400 像素，高 200 像素
+    QLabel label("设备监控系统启动");
+    label.resize(500, 300);  // 设置窗口大小：宽 400 像素，高 200 像素
     label.show();            // 显示出来
 
     // 第 3 步：进入事件循环
