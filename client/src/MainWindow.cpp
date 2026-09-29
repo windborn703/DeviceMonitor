@@ -2,6 +2,7 @@
 #include "MainWindow.h"
 #include "DeviceClient.h"
 #include "RealtimeCurveWidget.h"
+#include "HistoryTableModel.h"
 
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -14,6 +15,9 @@
 #include <QTextEdit>
 #include <QStatusBar>
 #include <QDateTime>
+#include <QTableView>
+#include <QDoubleSpinBox>
+#include <QHeaderView>
 #include "protocol.h"   // 指令码常量 CTRL_CMD_SET_PERIOD
 
 MainWindow::MainWindow(QWidget *parent)
@@ -103,6 +107,18 @@ void MainWindow::buildUi()
     m_pressValue = new QLabel("-- kPa", dataGroup);
     m_statusLabel = new QLabel("● 未连接", dataGroup);
 
+    // 报警阈值 + 报警状态
+    m_tempHighSpin = new QDoubleSpinBox(dataGroup);
+    m_tempHighSpin->setRange(-50.0, 150.0);
+    m_tempHighSpin->setValue(35.0);
+    m_tempHighSpin->setSuffix(" ℃");
+    m_tempLowSpin = new QDoubleSpinBox(dataGroup);
+    m_tempLowSpin->setRange(-50.0, 150.0);
+    m_tempLowSpin->setValue(15.0);
+    m_tempLowSpin->setSuffix(" ℃");
+    m_alarmStatus = new QLabel("✓ 温度正常", dataGroup);
+    m_alarmStatus->setStyleSheet("color: green;");
+
     // 温压显示用大字（24 号）更醒目
     QFont bigFont = m_tempValue->font();
     bigFont.setPointSize(24);
@@ -116,6 +132,21 @@ void MainWindow::buildUi()
     dataLayout->addRow("温度：", m_tempValue);
     dataLayout->addRow("压力：", m_pressValue);
     dataLayout->addRow("状态：", m_statusLabel);
+    dataLayout->addRow("温度上限：", m_tempHighSpin);
+    dataLayout->addRow("温度下限：", m_tempLowSpin);
+    dataLayout->addRow("报警：", m_alarmStatus);
+
+    // ===== 中部：历史数据表格（Model/View）=====
+    auto *historyGroup = new QGroupBox("历史数据（最近 100 条，超限标红）", this);
+    m_historyModel = new HistoryTableModel(historyGroup);   // Model：持有数据
+    m_tableView = new QTableView(historyGroup);             // View：只负责显示
+    m_tableView->setModel(m_historyModel);                  // 关键一行：视图挂上模型
+    m_tableView->setEditTriggers(QTableView::NoEditTriggers);  // 只读
+    m_tableView->setSelectionBehavior(QTableView::SelectRows); // 整行选中
+    m_tableView->horizontalHeader()->setStretchLastSection(true);
+    m_tableView->verticalHeader()->setVisible(false);
+    auto *historyLayout = new QVBoxLayout(historyGroup);
+    historyLayout->addWidget(m_tableView);
 
     // ===== 底部：日志 =====
     auto *logGroup = new QGroupBox("通信日志", this);
@@ -130,10 +161,11 @@ void MainWindow::buildUi()
     mainLayout->addWidget(connectGroup);
     mainLayout->addWidget(curveGroup, /*stretch=*/2);  // 曲线区占大头
     mainLayout->addWidget(dataGroup);
-    mainLayout->addWidget(logGroup, /*stretch=*/1);    // 日志区占剩余空间
+    mainLayout->addWidget(historyGroup, /*stretch=*/2);  // 历史表格
+    mainLayout->addWidget(logGroup, /*stretch=*/1);      // 日志区占剩余空间
     setCentralWidget(central);
 
-    resize(700, 720);
+    resize(760, 900);
     statusBar()->showMessage("就绪");
 }
 
@@ -202,7 +234,11 @@ void MainWindow::onDisconnected()
     m_seqValue->setText("--");
     m_tempValue->setText("-- ℃");
     m_pressValue->setText("-- kPa");
-    m_curveWidget->clear();  // 曲线清空，下次连接重新画
+    m_curveWidget->clear();       // 曲线清空，下次连接重新画
+    m_historyModel->clear();      // 历史表格清空
+    m_alarmCount = 0;             // 报警计数复位
+    m_alarmStatus->setText("✓ 温度正常");
+    m_alarmStatus->setStyleSheet("color: green;");
     statusBar()->showMessage("已断开");
     log("连接已断开。", "orange");
 }
@@ -220,6 +256,27 @@ void MainWindow::onDataReceived(quint16 deviceId, quint32 sequence,
     m_seqValue->setText(QString::number(sequence));
     m_tempValue->setText(QString("%1 ℃").arg(temperature, 0, 'f', 2));
     m_pressValue->setText(QString("%1 kPa").arg(pressure, 0, 'f', 2));
+
+    // ---- 超限报警判断 ----
+    const bool alarm = temperature > m_tempHighSpin->value()
+                    || temperature < m_tempLowSpin->value();
+    if (alarm) {
+        ++m_alarmCount;
+        m_alarmStatus->setText(QString("⚠ 超温报警（累计 %1 次）").arg(m_alarmCount));
+        m_alarmStatus->setStyleSheet("color: red; font-weight: bold;");
+        log(QString("🚨 温度 %.2f ℃ 超出阈值范围 [%.1f, %.1f]！")
+                .arg(double(temperature))
+                .arg(m_tempLowSpin->value())
+                .arg(m_tempHighSpin->value()), "red");
+    } else {
+        m_alarmStatus->setText("✓ 温度正常");
+        m_alarmStatus->setStyleSheet("color: green;");
+    }
+
+    // ---- 写入历史表格（超限行会标红）----
+    m_historyModel->addRecord(sequence, temperature, pressure,
+                              QDateTime::currentDateTime(), alarm);
+
     log(QString("采样 #%1：温度 %2 ℃，压力 %3 kPa")
             .arg(sequence)
             .arg(temperature, 0, 'f', 2)

@@ -13,6 +13,8 @@ qt_add_executable(DeviceMonitorClient
     src/DeviceClient.cpp
     src/RealtimeCurveWidget.h
     src/RealtimeCurveWidget.cpp
+    src/HistoryTableModel.h
+    src/HistoryTableModel.cpp
 )
 
 # 链接 Qt 模块 + 公共代码库（协议、帧解析器、控制台辅助）

@@ -9,9 +9,12 @@ class QLabel;
 class QLineEdit;
 class QPushButton;
 class QSpinBox;
+class QDoubleSpinBox;
 class QTextEdit;
+class QTableView;
 class DeviceClient;
 class RealtimeCurveWidget;
+class HistoryTableModel;
 
 class MainWindow : public QMainWindow
 {
@@ -54,6 +57,16 @@ private:
     QLabel      *m_statusLabel = nullptr;  // 连接状态灯
     QTextEdit   *m_logEdit     = nullptr;  // 日志区
     RealtimeCurveWidget *m_curveWidget = nullptr;  // 实时曲线
+
+    // --- 历史数据表格（Model/View）---
+    QTableView        *m_tableView    = nullptr;  // View：只负责显示
+    HistoryTableModel *m_historyModel = nullptr;  // Model：数据都在这里
+
+    // --- 报警 ---
+    QDoubleSpinBox *m_tempHighSpin = nullptr;  // 温度上限阈值
+    QDoubleSpinBox *m_tempLowSpin  = nullptr;  // 温度下限阈值
+    QLabel         *m_alarmStatus  = nullptr;  // 报警状态标签
+    int m_alarmCount = 0;                      // 累计报警次数
 
     // --- 通信层 ---
     DeviceClient *m_client = nullptr;
