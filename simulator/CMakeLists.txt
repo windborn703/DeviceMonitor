@@ -12,7 +12,5 @@ qt_add_executable(DeviceSimulator
     src/DeviceSimulator.cpp
 )
 
-target_link_libraries(DeviceSimulator PRIVATE Qt6::Network)
-
-# 让它能找到共享协议头文件 protocol.h
-target_include_directories(DeviceSimulator PRIVATE ${CMAKE_SOURCE_DIR}/common)
+# 链接公共代码库（协议 + 帧解析器，头文件路径自动传播过来）
+target_link_libraries(DeviceSimulator PRIVATE devicecommon Qt6::Network)

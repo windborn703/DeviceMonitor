@@ -8,7 +8,8 @@ project(DeviceMonitor VERSION 0.1 LANGUAGES CXX)  # 项目名 + 版本 + 语言
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# 两个子项目：各自的目录里有自己的 CMakeLists.txt
+# 子项目：common 必须在最前（其他子项目都依赖它）
+add_subdirectory(common)      # 公共代码库：协议 + 帧解析器（静态库）
 add_subdirectory(client)      # 上位机客户端（简历主角）
 add_subdirectory(simulator)   # 设备模拟器（虚拟工业设备）
 add_subdirectory(tests)       # 单元测试（协议打包验证等）
