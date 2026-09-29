@@ -1,7 +1,7 @@
 // ============ 通信层：上位机与设备之间的"接线员" ============
 // 职责：
 //   1. 建立/断开与设备模拟器的 TCP 连接（含自动重连）
-//   2. 心跳保活 + 看门狗：检测"假死连接"（对端断电/断网但不发断开通知）
+//   2. 心跳保活 + 活性检测：检测"假死连接"（对端断电/断网但不发断开通知）
 //   3. 把收到的字节流喂给 FrameParser，解析结果以信号形式向上抛出
 // 设计：不包含任何界面代码，不依赖 MainWindow —— 纯信号对外。
 #pragma once
@@ -39,14 +39,14 @@ signals:
 private:
     void onReadyRead();
     void onFrameReceived(quint8 type, const QByteArray &payload);
-    void onWatchdogTimeout();      // 看门狗：检查是否"假死"
+    void onActivityTimeout();      // 活性检测：检查连接是否"假死"
     void scheduleReconnect();      // 安排自动重连
 
     QTcpSocket m_socket;
     protocol::FrameParser m_parser;
 
     QTimer m_heartbeatTimer;  // 每 1.5 秒发一次心跳请求
-    QTimer m_watchdogTimer;   // 每 2 秒检查一次活性
+    QTimer m_activityTimer;   // 活性检测：每 2 秒检查一次连接活性
     QTimer m_reconnectTimer;  // 重连定时器（3 秒一次）
 
     qint64 m_lastActivity = 0;   // 上次收到任何数据的时刻（毫秒时间戳）

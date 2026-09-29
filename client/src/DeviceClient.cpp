@@ -1,4 +1,4 @@
-// ============ 通信层实现（心跳 + 看门狗 + 自动重连）============
+// ============ 通信层实现（心跳 + 活性检测 + 自动重连）============
 #include "DeviceClient.h"
 #include "protocol.h"   // 打包/常量
 #include <QDateTime>    // currentMSecsSinceEpoch：活性时间戳
@@ -53,11 +53,11 @@ DeviceClient::DeviceClient(QObject *parent)
                        qint64(frame.size()));
     });
 
-    // ---------- 看门狗：每 2 秒检查一次活性 ----------
-    m_watchdogTimer.setInterval(2000);
-    connect(&m_watchdogTimer, &QTimer::timeout,
-            this, &DeviceClient::onWatchdogTimeout);
-    m_watchdogTimer.start();  // 看门狗常开（重连期间也在跑）
+    // ---------- 活性检测：每 2 秒检查一次连接是否还有数据 ----------
+    m_activityTimer.setInterval(2000);
+    connect(&m_activityTimer, &QTimer::timeout,
+            this, &DeviceClient::onActivityTimeout);
+    m_activityTimer.start();  // 活性检测常开（重连期间也在跑）
 
     // ---------- 重连定时器：3 秒后重试 ----------
     m_reconnectTimer.setInterval(3000);
@@ -81,7 +81,7 @@ void DeviceClient::onFrameReceived(quint8 type, const QByteArray &)
         m_lastActivity = QDateTime::currentMSecsSinceEpoch();
 }
 
-void DeviceClient::onWatchdogTimeout()
+void DeviceClient::onActivityTimeout()
 {
     // 已连接但 6 秒没有任何数据（4 个心跳周期 + 3 个采样周期的余量）
     // → 判定"假死连接"：主动掐断，触发重连流程
