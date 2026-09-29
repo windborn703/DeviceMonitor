@@ -32,7 +32,7 @@ bool DeviceSimulator::start(quint16 port)
     qInfo() << "设备模拟器启动，监听端口" << port
             << "（设备 ID =" << m_deviceId << "）";
 
-    m_timer.start(1000);  // 1000 毫秒 = 每秒采样一次
+    m_timer.start(2000);  // 2000 毫秒 = 每 2 秒采样一次
     return true;
 }
 

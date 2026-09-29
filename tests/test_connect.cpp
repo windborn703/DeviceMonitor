@@ -4,9 +4,17 @@
 #include <QCoreApplication>
 #include <QTcpSocket>
 #include <cstdio>
+#ifdef Q_OS_WIN
+#  include <windows.h>
+#endif
 
 int main(int argc, char *argv[])
 {
+#ifdef Q_OS_WIN
+    // 告诉控制台本程序输出 UTF-8，避免中文乱码
+    SetConsoleOutputCP(CP_UTF8);
+#endif
+
     QCoreApplication app(argc, argv);
     QTcpSocket socket;
 
